@@ -1,8 +1,9 @@
 import requests
-import json
 import os
 import tkinter as tk
 from tkinter.messagebox import showinfo
+import datetime
+import time
 
 
 class MyCheckbutton(tk.Checkbutton):
@@ -53,6 +54,22 @@ class Mem_Thif:
         self.publick_section.remove(name_publick)
         self.wrire_publicks()
 
+    def compare_date(self, items):
+        items_list = []
+        for item in items:
+            post_time = item['attachments'][0]['photo']['date']
+            post_date = (datetime.datetime.fromtimestamp(int(post_time))
+                         .strftime('%Y-%m-%d %H:%M:%S'))
+            if self.get_time_now() < post_date:
+                items_list.append(item)
+        return items_list
+
+    @staticmethod
+    def get_time_now():
+        now = (datetime.datetime.fromtimestamp(int(time.time() - 24 * 3600))
+               .strftime('%Y-%m-%d %H:%M:%S'))
+        return now
+
     def get_responce(self):
         if self.publick_section:
             for domain in self.publick_section:
@@ -76,8 +93,9 @@ class Mem_Thif:
                         os.mkdir(domain)
                     except FileExistsError:
                         pass
-                    data = responce.json()['response']['items'][1:]
-                    mem = max(data, key=lambda name: name['likes']['count'])
+                    data = responce.json()['response']['items']
+                    mem_list = self.compare_date(data)
+                    mem = max(mem_list, key=lambda name: name['likes']['count'])
                     url = mem['attachments'][0]['photo']['sizes'][-1]['url']
                     text = mem['text']
                     self.download_mem(domain, url, text)
@@ -101,6 +119,18 @@ class WorkDesk:
     create = tk.Button(win)
     thif = Mem_Thif()
     roberry = tk.Button(win)
+
+    @staticmethod
+    def key_release(event):
+        ctrl = event.state and 4
+        if event.keycode == 88 and ctrl and event.keysym.lower() != "x":
+            event.widget.event_generate("<<Cut>>")
+
+        if event.keycode == 86 and ctrl and event.keysym.lower() != "v":
+            event.widget.event_generate("<<Paste>>")
+
+        if event.keycode == 67 and ctrl and event.keysym.lower() != "c":
+            event.widget.event_generate("<<Copy>>")
 
     @classmethod
     def menubar_cascad(cls):
@@ -126,6 +156,7 @@ class WorkDesk:
         tk.Label(win_set, text='Имя паблика').grid(column=0, row=0)
         publick = tk.Entry(win_set)
         publick.grid(column=0, row=1)
+        publick.bind("<Key>", cls.key_release)
         tk.Button(win_set, text='Добавить', command=add).grid(column=0, row=2)
 
     @classmethod
@@ -185,6 +216,7 @@ class WorkDesk:
         tk.Label(win_set, text='Токен из вк').grid(column=0, row=0)
         token = tk.Entry(win_set)
         token.grid(column=0, row=1)
+        token.bind("<Key>", cls.key_release)
         tk.Button(win_set, text='get', command=str_token).grid(column=0, row=2)
 
     @classmethod
