@@ -2,25 +2,30 @@ import requests
 import os
 import tkinter as tk
 from tkinter.messagebox import showinfo
+from tkinter import ttk
 import datetime
 import time
+from PIL import Image, ImageChops
 
 
 class MyCheckbutton(tk.Checkbutton):
     name = None
 
 
-class Mem_Thif:
+class MemThif:
+    '''Класс для получения самых залайканых мемов с выбранных пабликов'''
+    count_write_memes = 0
 
-    def __init__(self, token=None, vers_api=5.131):
+    def __init__(self, token='37ad53b837ad53b837ad53b83634b92ef8337ad37ad53b8532a0bbcb25f3bc98831a9dd', vers_api=5.131):
         self.directoria = os.getcwd()
         self.publick_section = []
         self.token = token
         self.vers_api = vers_api
-        self.create_dir()
         self.get_publicks()
 
     def get_publicks(self):
+        '''Метод добавляет названия пабликов(домены) из текстового файла(если он есть) publicks.txt
+        в атрибут экземпляра класса publick_section'''
         os.chdir(self.directoria)
         if os.path.isfile('publicks.txt'):
             with open('publicks.txt') as publicks:
@@ -28,6 +33,7 @@ class Mem_Thif:
                     self.publick_section.append(publick.rstrip())
 
     def wrire_publicks(self):
+        '''Метод добавляет названия пабликов(домены) в текстовый файл'''
         os.chdir(self.directoria)
         with open('publicks.txt', 'w') as text:
             for st in self.publick_section:
@@ -35,6 +41,7 @@ class Mem_Thif:
 
     def get_token(self, token: str):
         self.token = token
+        self.create_dir()
 
     def create_dir(self, name_dir="memes"):
         os.chdir(self.directoria)
@@ -57,11 +64,12 @@ class Mem_Thif:
     def compare_date(self, items):
         items_list = []
         for item in items:
-            post_time = item['attachments'][0]['photo']['date']
-            post_date = (datetime.datetime.fromtimestamp(int(post_time))
-                         .strftime('%Y-%m-%d %H:%M:%S'))
-            if self.get_time_now() < post_date:
-                items_list.append(item)
+            if item['attachments'][0]['type'] == 'photo':
+                post_time = item['date']
+                post_date = (datetime.datetime.fromtimestamp(int(post_time))
+                             .strftime('%Y-%m-%d %H:%M:%S'))
+                if self.get_time_now() < post_date:
+                    items_list.append(item)
         return items_list
 
     @staticmethod
@@ -71,6 +79,7 @@ class Mem_Thif:
         return now
 
     def get_responce(self):
+        self.create_dir()
         if self.publick_section:
             for domain in self.publick_section:
                 responce = requests.get('https://api.vk.com/method/wall.get',
@@ -80,7 +89,7 @@ class Mem_Thif:
                                             'domain': domain
                                         })
                 try:
-                    responce.json()['response']['items'][1:]
+                    responce.json()['response']['items']
                 except KeyError:
                     if responce.json()['error']['error_code'] != 5:
                         showinfo('Error', 'Неправильное название паблика')
@@ -91,33 +100,88 @@ class Mem_Thif:
                     try:
                         os.chdir('memes')
                         os.mkdir(domain)
+                    except FileNotFoundError:
+                        showinfo('Ошибка', 'Нет папки memes\n Нажми Create')
+                        return
                     except FileExistsError:
                         pass
                     data = responce.json()['response']['items']
                     mem_list = self.compare_date(data)
-                    mem = max(mem_list, key=lambda name: name['likes']['count'])
-                    url = mem['attachments'][0]['photo']['sizes'][-1]['url']
-                    text = mem['text']
-                    self.download_mem(domain, url, text)
+                    if mem_list:
+                        mem = max(mem_list, key=lambda name: name['likes']['count'])
+                        url = mem['attachments'][0]['photo']['sizes'][-1]['url']
+                        text = mem['text']
+                        self.download_mem(domain, url, text)
+
+                    else:
+                        continue
+            WorkDesk.info(len(self.publick_section))
+            self.count_write_memes = 0
+            WorkDesk.progressbar['value'] = 0
+
 
 
         else:
             showinfo('Ошибка', 'Список пабликов пуст')
 
+    def chec_pictures(self, pictures, domain=None):
+        '''Проверяет последнюю скачанную картинку и описание к ней(если оно есть) на одинаковсть
+        и удаляет их если это так'''
+
+        def del_text():
+            '''Проверяет есть ли описание к картинке и удаляет его'''
+            last_text = os.listdir(f'{self.directoria}/memes/{domain}/')[-1]  # Получение название файла
+            if last_text.endswith('txt'):  # Проверка расширения файла
+                last_text_way = os.path.join(f'{self.directoria}/memes/{domain}/',
+                                             last_text)  # Получение полного пути к файлу
+                os.remove(last_text_way)  # Удаление файла
+
+        last_image_way = os.path.join(f'{self.directoria}/memes/{domain}/', pictures)
+        last_image_picture = Image.open(last_image_way)
+        for filename in os.listdir(f'{self.directoria}/memes/{domain}/')[:-1]:
+            way = os.path.join(f'{self.directoria}/memes/{domain}/', filename)
+            if os.path.isfile(way) and filename.endswith('.jpg'):
+                image = Image.open(way)
+                result = ImageChops.difference(last_image_picture, image)
+                if result.getbbox() is None:
+                    os.remove(last_image_way)
+                    del_text()
+
     def download_mem(self, domain, url, caption):
+
         responce = requests.get(url)
-        with open(f"{domain}/{domain}.jpg", 'wb') as picture:
-            picture.write(responce.content)
-        if caption:
-            with open(f"{domain}/{domain}.txt", 'w', encoding='utf-8') as text:
-                text.write(caption)
+        files = len(os.listdir(path=f"{domain}/"))
+        if files:
+            with open(f"{domain}/{domain}{files}.jpg", 'wb') as picture:
+                picture.write(responce.content)
+            if caption:
+                with open(f"{domain}/{domain}{files}.txt", 'w', encoding='utf-8') as text:
+                    text.write(caption)
+
+            last_image = os.listdir(f'{self.directoria}/memes/{domain}/')[-1]
+            if last_image.endswith('txt'):
+                last_image = os.listdir(f'{self.directoria}/memes/{domain}/')[-2]
+
+            self.chec_pictures(last_image, domain)
+
+        else:
+            with open(f"{domain}/{domain}.jpg", 'wb') as picture:
+                picture.write(responce.content)
+            if caption:
+                with open(f"{domain}/{domain}.txt", 'w', encoding='utf-8') as text:
+                    text.write(caption)
+        self.count_write_memes += 1
+        WorkDesk.progress_bar()
         os.chdir(self.directoria)
 
 
 class WorkDesk:
+    '''Класс в котором описывается графическая часть программы.
+    Один из атрибутов экземпляр класса  MemThif'''
     win = tk.Tk()
-    create = tk.Button(win)
-    thif = Mem_Thif()
+
+    progressbar = ttk.Progressbar(win)
+    thif = MemThif()
     roberry = tk.Button(win)
 
     @staticmethod
@@ -133,14 +197,15 @@ class WorkDesk:
             event.widget.event_generate("<<Copy>>")
 
     @classmethod
-    def menubar_cascad(cls):
-        menubar = tk.Menu(cls.win)
-        cls.win.config(menu=menubar)
+    def progress_bar(cls):
+        cls.progressbar['value'] = cls.thif.count_write_memes
+        cls.win.update()
+        return cls.thif.count_write_memes
 
-        setting_menu = tk.Menu(menubar, tearoff=0)
-        setting_menu.add_command(label='Написать свой токен', command=cls.setting)
-
-        menubar.add_cascade(label='Токен ВК', menu=setting_menu)
+    @classmethod
+    def info(cls, count):
+        if count == len(cls.thif.publick_section):
+            showinfo('Информация', f'Успешно {count} из {count}\n Зайдите в папку memes')
 
     @classmethod
     def add_publick_desk(cls):
@@ -149,6 +214,8 @@ class WorkDesk:
             if add_publick:
                 cls.thif.add_publick(add_publick)
                 publick.delete(0, tk.END)
+            cls.progressbar['maximum'] = len(cls.thif.publick_section)
+            WorkDesk.progressbar['value'] = 0
 
         win_set = tk.Toplevel(cls.win)
         win_set.geometry(f'300x200')
@@ -167,6 +234,7 @@ class WorkDesk:
                 if pub.get():
                     cls.thif.del_publick(check_list[num].name)
                 win_set.destroy()
+            cls.progressbar['maximum'] = len(cls.thif.publick_section)
 
         check_list = []
         varable_list = []
@@ -194,56 +262,25 @@ class WorkDesk:
         rule_bot.add_command(label='Добавить паблик', command=cls.add_publick_desk)
         rule_bot.add_command(label='Удалить паблик', command=cls.del_publick_desk)
 
-        setting_menu.add_command(label='Написать свой токен', command=cls.setting)
-
-        menubar.add_cascade(label='Токен ВК', menu=setting_menu)
         menubar.add_cascade(label='Bot', menu=rule_bot)
 
     @classmethod
-    def setting(cls):
-        def str_token():
-            if token.get():
-                cls.token = token.get()
-                token.delete(0, tk.END)
-                with open('token.txt', 'w') as api:
-                    api.write(cls.token)
-            else:
-                showinfo('Error', 'Пустое поле ввода')
-
-        win_set = tk.Toplevel(cls.win)
-        win_set.geometry(f'300x200')
-        win_set.wm_title('Написать свой токен')
-        tk.Label(win_set, text='Токен из вк').grid(column=0, row=0)
-        token = tk.Entry(win_set)
-        token.grid(column=0, row=1)
-        token.bind("<Key>", cls.key_release)
-        tk.Button(win_set, text='get', command=str_token).grid(column=0, row=2)
+    def config_progressbar(cls):
+        cls.progressbar.config(mode='determinate', maximum=len(cls.thif.publick_section), value=0)
 
     @classmethod
     def get_token(cls):
-        print()
-        try:
-            with open('token.txt') as api:
-                token = api.read()
-                cls.thif.get_token(token=token)
-            cls.menubar_cascad_and_thif()
-            cls.roberry.config(text='Спиздим мемы', command=cls.thif.get_responce, fg='red', font='Areal 15')
-            cls.roberry.pack(anchor='center')
-        except FileNotFoundError:
-            showinfo('Error', 'Нет токена')
+        cls.thif.create_dir()
 
     @classmethod
     def start(cls):
-        if os.path.isfile('token.txt'):
-            cls.get_token()
-            cls.menubar_cascad_and_thif()
-            cls.roberry.config(text='Спиздим мемы', command=cls.thif.get_responce, fg='red', font='Areal 15')
-            cls.roberry.pack(anchor='center')
-        else:
-            cls.menubar_cascad()
-        cls.create.config(text='create', command=cls.get_token, fg='red', font='Areal 15')
-        cls.create.pack()
+        cls.menubar_cascad_and_thif()
+        cls.roberry.config(text='Спиздим мемы', command=cls.thif.get_responce, fg='red', font='Areal 15')
+        cls.roberry.pack(anchor='center')
         cls.win.title('Спиздим мемы')
+        cls.config_progressbar()
+        cls.progressbar.pack()
+        cls.progress_bar()
         cls.win.geometry("600x450")
         cls.win.mainloop()
 
