@@ -15,6 +15,7 @@ class MyCheckbutton(tk.Checkbutton):
 class MemThif:
     '''Класс для получения самых залайканых мемов с выбранных пабликов'''
     count_write_memes = 0
+    count_unwritten_publick = 0
 
     def __init__(self, token='37ad53b837ad53b837ad53b83634b92ef8337ad37ad53b8532a0bbcb25f3bc98831a9dd', vers_api=5.131):
         self.directoria = os.getcwd()
@@ -61,16 +62,25 @@ class MemThif:
         self.publick_section.remove(name_publick)
         self.wrire_publicks()
 
-    def compare_date(self, items):
+    def compare_date(self, items,domain):
         items_list = []
         for item in items:
-            if item['attachments'][0]['type'] == 'photo':
-                post_time = item['date']
-                post_date = (datetime.datetime.fromtimestamp(int(post_time))
-                             .strftime('%Y-%m-%d %H:%M:%S'))
-                if self.get_time_now() < post_date:
-                    items_list.append(item)
-        return items_list
+            try:
+                if item['attachments'][0]['type'] == 'photo':
+                    post_time = item['date']
+                    post_date = (datetime.datetime.fromtimestamp(int(post_time))
+                                 .strftime('%Y-%m-%d %H:%M:%S'))
+                    if self.get_time_now() < post_date:
+                        items_list.append(item)
+            except IndexError:
+                continue
+        if items_list:
+            return items_list
+        else:
+            self.count_unwritten_publick += 1
+            WorkDesk.progress_bar()
+            showinfo('Ошибка', f' В паблике {domain}\n нет картинок удовлетворяющих\n условию поиска')
+            return
 
     @staticmethod
     def get_time_now():
@@ -100,26 +110,24 @@ class MemThif:
                     try:
                         os.chdir('memes')
                         os.mkdir(domain)
-                    except FileNotFoundError:
-                        showinfo('Ошибка', 'Нет папки memes\n Нажми Create')
-                        return
                     except FileExistsError:
                         pass
                     data = responce.json()['response']['items']
-                    mem_list = self.compare_date(data)
+                    mem_list = self.compare_date(data,domain)
                     if mem_list:
                         mem = max(mem_list, key=lambda name: name['likes']['count'])
                         url = mem['attachments'][0]['photo']['sizes'][-1]['url']
                         text = mem['text']
                         self.download_mem(domain, url, text)
+                        os.chdir(self.directoria)
 
                     else:
+                        os.chdir(self.directoria)
                         continue
-            WorkDesk.info(len(self.publick_section))
+            WorkDesk.info()
             self.count_write_memes = 0
+            self.count_unwritten_publick = 0
             WorkDesk.progressbar['value'] = 0
-
-
 
         else:
             showinfo('Ошибка', 'Список пабликов пуст')
@@ -172,7 +180,6 @@ class MemThif:
                     text.write(caption)
         self.count_write_memes += 1
         WorkDesk.progress_bar()
-        os.chdir(self.directoria)
 
 
 class WorkDesk:
@@ -198,14 +205,13 @@ class WorkDesk:
 
     @classmethod
     def progress_bar(cls):
-        cls.progressbar['value'] = cls.thif.count_write_memes
+        cls.progressbar['value'] = cls.thif.count_write_memes + cls.thif.count_unwritten_publick
         cls.win.update()
         return cls.thif.count_write_memes
 
     @classmethod
-    def info(cls, count):
-        if count == len(cls.thif.publick_section):
-            showinfo('Информация', f'Успешно {count} из {count}\n Зайдите в папку memes')
+    def info(cls):
+        showinfo('Информация', f'Успешно {cls.thif.count_write_memes} из {len(cls.thif.publick_section)}\n Зайдите в папку memes')
 
     @classmethod
     def add_publick_desk(cls):
@@ -256,8 +262,6 @@ class WorkDesk:
     def menubar_cascad_and_thif(cls):
         menubar = tk.Menu(cls.win)
         cls.win.config(menu=menubar)
-
-        setting_menu = tk.Menu(menubar, tearoff=0)
         rule_bot = tk.Menu(menubar, tearoff=0)
         rule_bot.add_command(label='Добавить паблик', command=cls.add_publick_desk)
         rule_bot.add_command(label='Удалить паблик', command=cls.del_publick_desk)
