@@ -9,6 +9,7 @@ from PIL import Image, ImageChops
 
 
 class MyCheckbutton(tk.Checkbutton):
+    '''Наследованный класс с добавленным атрибутом name'''
     name = None
 
 
@@ -26,7 +27,7 @@ class MemThif:
 
     def get_publicks(self):
         '''Метод добавляет названия пабликов(домены) из текстового файла(если он есть) publicks.txt
-        в атрибут экземпляра класса publick_section'''
+        в атрибут экземпляра класса publick_section.'''
         os.chdir(self.directoria)
         if os.path.isfile('publicks.txt'):
             with open('publicks.txt') as publicks:
@@ -40,16 +41,16 @@ class MemThif:
             for st in self.publick_section:
                 text.write(st + '\n')
 
-    def get_token(self, token: str):
-        self.token = token
-        self.create_dir()
-
     def create_dir(self, name_dir="memes"):
+        '''Метод создает папку "memes" в директории с открываемым ехе-файлом'''
         os.chdir(self.directoria)
         if not os.path.isdir(name_dir):
             os.mkdir(name_dir)
 
     def add_publick(self, name_publick: str):
+        '''Метод проверяет на наличие паблика(домена) в списке publick_section
+        и добавляет его туда если он отсутствует.
+        Перезаписывает файл publicks.txt'''
         os.chdir(self.directoria)
         if name_publick in self.publick_section:
             showinfo('Ошибка', 'Паблик уже добавлен')
@@ -58,11 +59,17 @@ class MemThif:
             self.wrire_publicks()
 
     def del_publick(self, name_publick):
+        '''Удаляет паблик(домен) из списка publick_section.
+        Перезаписывает файл publicks.txt'''
         os.chdir(self.directoria)
         self.publick_section.remove(name_publick)
         self.wrire_publicks()
 
-    def compare_date(self, items,domain):
+    def compare_date(self, items, domain):
+        '''Метод селектирует посты из ВК по типу и дате.
+        Возвращает список items_list если в нем есть посты удовлетворяющие условию поиска.
+        В другом случае возвращает None и сообщение в окне,
+        так же делает self.count_unwritten_publick += 1'''
         items_list = []
         for item in items:
             try:
@@ -84,11 +91,13 @@ class MemThif:
 
     @staticmethod
     def get_time_now():
+        '''Статический метод для получения текущего значения даты и времени'''
         now = (datetime.datetime.fromtimestamp(int(time.time() - 24 * 3600))
                .strftime('%Y-%m-%d %H:%M:%S'))
         return now
 
     def get_responce(self):
+        '''Метод для получения картинок с наибольшим кол-ом лайков за время "Текущая дата - 24 часа".'''
         self.create_dir()
         if self.publick_section:
             for domain in self.publick_section:
@@ -113,7 +122,7 @@ class MemThif:
                     except FileExistsError:
                         pass
                     data = responce.json()['response']['items']
-                    mem_list = self.compare_date(data,domain)
+                    mem_list = self.compare_date(data, domain)
                     if mem_list:
                         mem = max(mem_list, key=lambda name: name['likes']['count'])
                         url = mem['attachments'][0]['photo']['sizes'][-1]['url']
@@ -156,6 +165,9 @@ class MemThif:
                     del_text()
 
     def download_mem(self, domain, url, caption):
+        '''Метод для скачивания на уст-во картинок в соответствующие папки с именем паблика(домена)
+        в папке memes с описанием картинок если оно есть.
+        Новые файлы записываются с присвоением нового имени domain+1.'''
 
         responce = requests.get(url)
         files = len(os.listdir(path=f"{domain}/"))
@@ -193,6 +205,8 @@ class WorkDesk:
 
     @staticmethod
     def key_release(event):
+        '''Метод который позволяет испоьзовать "Ctrl+C","Ctrl+V","Ctrl+X"
+        в виджете Entry с русской раскладкой клавиатуры'''
         ctrl = event.state and 4
         if event.keycode == 88 and ctrl and event.keysym.lower() != "x":
             event.widget.event_generate("<<Cut>>")
@@ -205,17 +219,25 @@ class WorkDesk:
 
     @classmethod
     def progress_bar(cls):
+        '''Метод описывающий работу шкалы загрузки'''
         cls.progressbar['value'] = cls.thif.count_write_memes + cls.thif.count_unwritten_publick
         cls.win.update()
         return cls.thif.count_write_memes
 
     @classmethod
     def info(cls):
-        showinfo('Информация', f'Успешно {cls.thif.count_write_memes} из {len(cls.thif.publick_section)}\n Зайдите в папку memes')
+        '''Метод вызывающий инфор-ное окно с колличеством успешно обработанных пабликов(доменов)
+        при попытке скачать картинки'''
+        showinfo('Информация',
+                 f'Успешно {cls.thif.count_write_memes} из {len(cls.thif.publick_section)}\n Зайдите в папку memes')
 
     @classmethod
     def add_publick_desk(cls):
+        '''Метод вызывающий всплывающее меню(каскад) с полем для записи названия паблика(домена)'''
+
         def add():
+            '''Функция для обработки поля ввода и записи нового паблика(домена)
+            через метод класса MemThif add_publick'''
             add_publick = publick.get()
             if add_publick:
                 cls.thif.add_publick(add_publick)
@@ -234,8 +256,10 @@ class WorkDesk:
 
     @classmethod
     def del_publick_desk(cls):
+        '''Метод для работы с интерфейсом удаления пабликов(доменов) из списка'''
 
         def deliter():
+            '''Функция для удаления пабликов(доменов)'''
             for num, pub in enumerate(varable_list):
                 if pub.get():
                     cls.thif.del_publick(check_list[num].name)
@@ -260,6 +284,7 @@ class WorkDesk:
 
     @classmethod
     def menubar_cascad_and_thif(cls):
+        '''Метод вызывающий каскадное меню'''
         menubar = tk.Menu(cls.win)
         cls.win.config(menu=menubar)
         rule_bot = tk.Menu(menubar, tearoff=0)
@@ -270,14 +295,12 @@ class WorkDesk:
 
     @classmethod
     def config_progressbar(cls):
+        '''Метод для настройки шкалы прогресса'''
         cls.progressbar.config(mode='determinate', maximum=len(cls.thif.publick_section), value=0)
 
     @classmethod
-    def get_token(cls):
-        cls.thif.create_dir()
-
-    @classmethod
     def start(cls):
+        '''Метод вызывающий необходимые функции и методы'''
         cls.menubar_cascad_and_thif()
         cls.roberry.config(text='Спиздим мемы', command=cls.thif.get_responce, fg='red', font='Areal 15')
         cls.roberry.pack(anchor='center')
